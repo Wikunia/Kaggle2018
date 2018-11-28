@@ -3,11 +3,16 @@ using CSV, DataFrames, Distances, DelimitedFiles
 
 vcattime = 0.0
 starttime = 0.0
+sumtime = 0.0
 
 mutable struct Score
     value :: Float64
     dist_path :: Vector{Float64}
     scaled_dist_path ::  Vector{Float64}
+end
+
+function Base.copy(a::Score) 
+    return Score(a.value, a.dist_path, a.scaled_dist_path)
 end
 
 mutable struct Cities
@@ -54,23 +59,16 @@ function calc_score(cities, list_path, tenth)
     return Score(sum(result), dist_path, result)
 end
 
-function calc_score_reverse(cities, list_path, tenth, normal_dist_path, reversed_dist_path, low, high)
-    global vcattime, starttime
-    t = time()
-    xy_cities = cities.xy
-    starttime += time()-t
+function calc_score_reverse!(dist_path, result, xy_cities, nprimes, list_path, tenth, normal_dist_path, reversed_dist_path, low, high)
     len_path  = length(list_path)
     # Calc Distance
-    @views xy_path   = xy_cities[list_path,:]
+    xy_path   = xy_cities[list_path,:]
     
-    t = time()
-    dist_path = copy(normal_dist_path)
-#     dist_path[1:low-2] = normal_dist_path[1:low-2]
+    dist_path[1:low-2] = normal_dist_path[1:low-2]
     dist_path[low-1] = euclidean(xy_path[low-1,:],xy_path[low,:])
     @views dist_path[low:high-1] = reversed_dist_path[len_path-high+1:len_path-low]
     dist_path[high] = euclidean(xy_path[high,:],xy_path[high+1,:])
-#     dist_path[high+1:end] = normal_dist_path[high+1:end]
-    vcattime += time()-t
+    dist_path[high+1:end] = normal_dist_path[high+1:end]
     #=
     dist_path = vcat(normal_dist_path[1:low-2], # before switch
                      [euclidean(xy_path[low-1,:],xy_path[low,:])], # new edge at the beginning
@@ -83,11 +81,20 @@ function calc_score_reverse(cities, list_path, tenth, normal_dist_path, reversed
     
     # List of Primes 0 to (len_path-1)
     # Flag array, is path's from-city number non-prime?
-    @views is_path_from_non_prime  = cities.nprimes[list_path][1:end-1]
+    @views @inbounds is_path_from_non_prime  = nprimes[list_path[1:end-1]]
     # If both flags are true, *1.1, else * 1.0
-    result = @. dist_path * (1.0 + 0.1 * is_path_from_non_prime * tenth)
+    result[1:end] = dist_path 
+    result .*= (1.0 .+ 0.1 .* is_path_from_non_prime .* tenth)
+#     new_result = @. dist_path * (1.0 + 0.1 * is_path_from_non_prime * tenth)
     sum_result = sum(result)
     return Score(sum_result, dist_path, result)
+end
+
+function two_opt_reasonable!(old, new, xy_path, dist_path, low, high; margin=100)
+    @inbounds old = dist_path[low-1]+dist_path[high]
+#     @assert euclidean(xy_path[low-1,:],xy_path[low,:])+euclidean(xy_path[high,:],xy_path[high+1,:]) == old
+    @inbounds new = euclidean(xy_path[low-1,:],xy_path[high,:])+euclidean(xy_path[low,:],xy_path[high+1,:])
+    return new-margin < old
 end
 
 function two_opt(cities,subm_path)
@@ -102,43 +109,64 @@ function two_opt(cities,subm_path)
     tenth = [(i % 10) == 0 for i in 1:n-1]
     oldCost = calc_score(cities, path, tenth)
     reversed_dist_path = reverse(oldCost.dist_path)
-    time_for_1000 = time()
-	while improved && reverses < 2
+    time_for_10000 = time()
+    overwrite_dist_path = zeros(n-1)
+    overwrite_result = zeros(n-1)
+    checked_reasonable = 0
+    oldReasonable, newReasonable = 0.0, 0.0
+    xy_cities = cities.xy
+    xy_path   = xy_cities[path,:]
+    nprimes   = cities.nprimes
+    
+    t = time()
+    print_every = 100
+	while improved
 		improved = false
 		# we can't change the first 
 		for i in switchLow:(switchHigh-1)
-            println("i: ", i)
-            t = time()
+            if i % print_every == 0
+                println("i: ", i)
+                println("checked_reasonable: ", checked_reasonable)
+                println("Time for one i: ", (time()-t)/print_every)
+                flush(stdout)
+                t = time()
+            end
+            
 			for j in switchHigh:-1:(i+1)
-                if j % 1000 == 0
-                    println("j: ", j)
-                    println("calc in: ", time()-time_for_1000)
-                    time_for_1000 = time()
-                    break
+                reasonable =  two_opt_reasonable!(oldReasonable, newReasonable,
+                                                      xy_path, oldCost.dist_path, i, j)
+                if reasonable
+                    checked_reasonable += 1
+                    n_path = copy(path)
+                    reverse!(n_path, i, j)
+                    altCost = calc_score_reverse!(overwrite_dist_path, overwrite_result,
+                                                 xy_cities, nprimes, n_path, tenth, oldCost.dist_path, 
+                                                 reversed_dist_path, i, j)
+
+                   
+
+                    if altCost.value < oldCost.value
+                        altCost_dif =  calc_score(cities, n_path, tenth)
+                        println(altCost.value - altCost_dif.value)
+                        println("i: ", i)
+                        println("j: ", j)
+                        println("altCost.value: ", altCost.value)
+                        println("altCost_dif.value: ", altCost_dif.value)
+                        @assert altCost.value - altCost_dif.value == 0
+                        
+                        println("Improved by: ", oldCost.value-altCost.value)
+                        path = n_path
+                        oldCost = altCost_dif
+                        reversed_dist_path = reverse(oldCost.dist_path)
+                        xy_path   = xy_cities[path,:]
+                        reverses += 1
+                        improved = true
+                        df = DataFrame(Path=path.-1)
+                        CSV.write("tsp_improved_new.csv", df);
+                    end
                 end
-                n_path = copy(path)
-                reverse!(n_path, i, j)
-				altCost = calc_score_reverse(cities, n_path, tenth, oldCost.dist_path, 
-                                             reversed_dist_path, i, j)
-                
-                #=
-                altCost_dif =  calc_score(cities, n_path, tenth)
-                println(altCost.value - altCost_dif.value)
-                @assert altCost.value - altCost_dif.value == 0
-                =#
-                
-                if altCost.value < oldCost.value
-                    println("Improved by: ", oldCost.value-altCost.value)
-                    path = n_path
-                    oldCost = altCost
-                    reversed_dist_path = reverse(oldCost.dist_path)
-                    reverses += 1
-					improved = true
-                    df = DataFrame(Path=path)
-                    CSV.write("tsp_improved.csv", df);
-				end
 			end
-            println("Time for one i: ", time()-t)
+            
 		end
 	end
 	println("Reverses 1: ", reverses)
@@ -148,12 +176,13 @@ function two_opt(cities,subm_path)
 end
 
 function main()
-    global vcattime, starttime
+    global vcattime, starttime, sumtime
     vcattime = 0.0
     starttime = 0.0
+    sumtime = 0.0
     cities_csv = CSV.read("cities_p.csv");
     subm_df = CSV.read("tsp_improved.csv"); # 53
-    subm_path = subm_df[:Path];
+    subm_path = collect(skipmissing(subm_df[:Path]))
     subm_path .+= 1
     xy_cities   = zeros(size(cities_csv)[1],2)
     xy_cities[:,1] = cities_csv[:X]
@@ -172,4 +201,5 @@ end
 new_path = main();
 println("vcattime: ", vcattime)
 println("starttime: ", starttime)
+println("sumtime: ", sumtime)
 # println(new_path)
