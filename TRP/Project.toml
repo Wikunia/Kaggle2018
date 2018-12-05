@@ -1,0 +1,11 @@
+name = "TRP"
+uuid = "36738498-f8b5-11e8-2885-5b87e35ddab2"
+authors = ["Ole Kröger <o.kroeger@wikunia.de>"]
+version = "0.1.0"
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Cbc = "9961bab8-2fa3-5c5a-9d89-47fab24efd76"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
