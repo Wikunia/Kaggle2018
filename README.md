@@ -18,6 +18,6 @@ This reads the submission file "combined.csv" and if there is an improvement it 
 Starting MIP from 0 up to 200 with a path length of 100. Current stride is 45 but will be customizable.
 
 ### Parallel
-You can run it by the command `julia run_par_mip.jl -i combined -o mip -p X` where `X` is the numer of processors you want to use.
+You can run it by the command `julia run_par_mip.jl -i combined -o mip -p X` where `X` is the numer of processors you want to use. Then you need to install ArgParse with `] add ArgParse`.
 `submissions/combined.csv` should be the submission file you want to improve on and `submissions/mip.csv` will be created or overwritten with the new current best.
 This will be done whenever a new better solution was found. You can run `julia run_par_mip.jl --help` to get more information about the commands.

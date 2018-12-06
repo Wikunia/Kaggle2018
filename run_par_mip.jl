@@ -26,6 +26,10 @@ function get_args()
             help = "Length of a path solved with MIP default=202"
             arg_type = Int
             default = 202
+        "--max_time", "-t"
+            help = "The maximum amount of time in seconds available to find a better solution for one MIP default 100 seconds"
+            arg_type = Int
+            default = 100
     end
 
     return parse_args(s)
@@ -36,5 +40,6 @@ if isinteractive() == false
     addprocs(args["processors"])
     println("Added "*string(args["processors"])*" processors")
     using TRP
-    TRP.main_mip_parallel(args["in"], args["out"]; from=args["start"], to=args["end"], N=args["length"])
+    TRP.main_mip_parallel(args["in"], args["out"]; from=args["start"],
+                          to=args["end"], N=args["length"], max_mip_time=args["max_time"])
 end
