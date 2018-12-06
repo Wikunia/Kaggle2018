@@ -1,5 +1,5 @@
 
-using Distances, JuMP, Cbc
+using Distributed, Distances, JuMP, Cbc
 
 """
     get_cycle!(cycle_vars, x_vals, to_vec, m, x, N; first=true)
@@ -155,12 +155,12 @@ function solved(m::JuMP.Model, x::JuMP.JuMPDict, N::Int)
 end
 
 """
-    prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path)
+    prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path; verbose=false)
 
 Computes a new path and scores it with the santa score. If it's better return true else false.
 @TODO might be reasonable to further check for improvements even if already an improvement was found
 """
-function check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path)
+function check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path; verbose=false)
     to_vec = zeros(Int,N)
     x_vals = get_x_vals(x,N)
     cycle_vars = Dict{Int64,Bool}()
@@ -170,8 +170,10 @@ function check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra
     cycle_idx = cycle_idx[1:end-1]
     new_path = subm_path[start.+cycle_idx]
     new_score, new_extra, min_extra = calc_score_with_extra(cities, new_path, tenth)
-    println("Current New score: ", new_score)
-    println("Current New score without extra: ", new_score-new_extra)
+    if verbose
+        println("Current New score: ", new_score)
+        println("Current New score without extra: ", new_score-new_extra)
+    end
     if new_score < score
         return true
     else
@@ -190,14 +192,16 @@ function check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra
     end
 end
 
-function run_mip(start, cities, tenth, subm_path, N; max_time=100)
-    println("Start: ", start)
+function run_mip(start, cities, tenth, subm_path, N; max_time=100, verbose=false)
+    verbose && println("Start: ", start)
     old_subm_path = copy(subm_path)
     score, extra, min_extra = calc_score_with_extra(cities, subm_path[start+1:start+N], tenth)
-    println("Current distance with extra: ", score)
-    println("Current distance w/o extra: ", score-extra)
-    println("Current extra: ", extra)
-    println("Search form normal dist < ", score-min_extra)
+    if verbose
+        println("Current distance with extra: ", score)
+        println("Current distance w/o extra: ", score-extra)
+        println("Current extra: ", extra)
+        println("Search form normal dist < ", score-min_extra)
+    end
     
     mip_time = time()
     pre_time = time()
@@ -230,13 +234,13 @@ function run_mip(start, cities, tenth, subm_path, N; max_time=100)
 
     t = time()
     status = solve(m)
-    println("Status: ", status)
+    verbose && println("Status: ", status)
     
     # This shouldn't happen but also shouldn't kill the program
     if status == :Infeasible
         return subm_path, false
     end
-    println("MIP Obj: ", getobjectivevalue(m))
+    verbose && println("MIP Obj: ", getobjectivevalue(m))
     
     # remove cycles
     while !solved(m,x,N)
@@ -251,7 +255,7 @@ function run_mip(start, cities, tenth, subm_path, N; max_time=100)
     counter = 0
     # check if the current is a better prime solution if not remove the path 
     # and try again
-    improved = check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path)
+    improved = check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path; verbose=verbose)
     while !improved && time()-mip_time < max_time
         status = solve(m)
         status == :Infeasible && break
@@ -260,42 +264,44 @@ function run_mip(start, cities, tenth, subm_path, N; max_time=100)
             status = solve(m)
             status == :Infeasible && break
             if time()-mip_time >= max_time
-                status == :Infeasible
+                status = :Infeasible
                 break
             end
         end
         status == :Infeasible && break
         counter += 1 
-        improved = check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path)
+        improved = check_prime_improved(start, m, x, N, cities, tenth, dists, score, extra, subm_path; verbose=verbose)
     end
     
     
     improved_by = 0.0
     if improved
         println("FOUND BETTER...") 
-        println("Counter: , ", counter)
+        verbose && println("Counter: , ", counter)
         to_vec = zeros(Int,N)
         x_vals = get_x_vals(x,N)
         cycle_vars = Dict{Int64,Bool}()
         bcycle = get_vec!(to_vec, x_vals, cycle_vars, N)
         cycle_idx, _ = get_cycle!(cycle_vars, x_vals, to_vec, m, x, N)
-        println("New tour: ", cycle_idx)
+        verbose && println("New tour: ", cycle_idx)
         new_path = subm_path[start.+cycle_idx][1:end-1]
         new_score = calc_score(cities, new_path, tenth)
         @assert score-new_score > 0
         improved_by = score-new_score
         println("Improved by: ", score-new_score)
-        global_tenth = [(i % 10) == 0 for i in 1:length(subm_path)-1]
-        println("oldScore: ", calc_score(cities, subm_path, global_tenth))
-        subm_path[start+1:start+N] = new_path 
-        println("newScore: ", calc_score(cities, subm_path, global_tenth))
+        if verbose
+            global_tenth = [(i % 10) == 0 for i in 1:length(subm_path)-1]
+            println("oldScore: ", calc_score(cities, subm_path, global_tenth))
+            subm_path[start+1:start+N] = new_path 
+            println("newScore: ", calc_score(cities, subm_path, global_tenth))
+        end
         improved = true
     else
        @assert subm_path == old_subm_path     
     end
-    println("Time for solving: ", time()-t)
+    verbose && println("Time for solving: ", time()-t)
 
-    if status != :Infeasible
+    if verbose && status != :Infeasible
         println("Obj: ", getobjectivevalue(m))
     end
 
@@ -303,7 +309,12 @@ function run_mip(start, cities, tenth, subm_path, N; max_time=100)
     return subm_path, improved, improved_by # subm_path, improved
 end           
 
-function main_mip(path_fn_in, path_fn_out, from, to; N=202, max_mip_time=100)
+"""
+    main_mip(path_fn_in, path_fn_out; from=0, to=197769, stride=45, N=202, max_mip_time=100)
+
+Run x MIPs from `from` to `to` with a given stride and a length of N using a time limit, a given path of input and output path file 
+"""
+function main_mip(path_fn_in, path_fn_out; from=0, to=197769, stride=45, N=202, max_mip_time=100)
     t = time()
     if path_fn_in[end-3:end] != ".csv"
         path_fn_in *= ".csv"
@@ -314,9 +325,9 @@ function main_mip(path_fn_in, path_fn_out, from, to; N=202, max_mip_time=100)
     cities, subm_path = read_cities_and_subm("cities_p.csv", "submissions/"*path_fn_in)
 
     total_improved_by = 0.0
-    for i=from:45:to
+    for i=from:45:to-N-1
         tenth = [(s % 10) == 0 for s in i+1:i+N-1]
-        subm_path, improved, improved_by = run_mip(i, cities, tenth, subm_path, N; max_time=max_mip_time);
+        subm_path, improved, improved_by = run_mip(i, cities, tenth, subm_path, N; max_time=max_mip_time, verbose=true);
         total_improved_by += improved_by
         println("Improvement per hour: ", total_improved_by*(3600/(time()-t)))
         println("Total run time: ", time()-t)
@@ -324,6 +335,65 @@ function main_mip(path_fn_in, path_fn_out, from, to; N=202, max_mip_time=100)
         if improved
            df = DataFrame(Path=subm_path.-1)
            CSV.write("submissions/"*path_fn_out, df);
+        end
+    end
+end
+
+"""
+    main_mip_parallel(path_fn_in, path_fn_out; from=0, to=197769, N=202, max_mip_time=100)
+
+Run x MIPs from `from` to `to` and length of N using a time limit, a given path of input and output path file.
+This function is run in parallel based on the number of processors available (you can add them by using addprocs(Z))
+"""
+function main_mip_parallel(path_fn_in, path_fn_out; from=0, to=197769, N=202, max_mip_time=100)
+    next_start = from-N-1
+    function get_next_start()
+        next_start += N+1
+        next_start > to-N-1 && return -1, []
+        tenth = [(s % 10) == 0 for s in next_start+1:next_start+N-1]
+        return next_start, tenth
+    end
+
+    np = nprocs()
+
+    if path_fn_in[end-3:end] != ".csv"
+        path_fn_in *= ".csv"
+    end
+    if path_fn_out[end-3:end] != ".csv"
+        path_fn_out *= ".csv"
+    end
+    cities, subm_path = read_cities_and_subm("cities_p.csv", "submissions/"*path_fn_in)
+
+    still_running = true
+    global_start_time = time()
+    total_improved_by = 0.0
+    @sync begin
+        for p=1:np
+            if p != myid() || np == 1
+                @async begin
+                    while true
+                        start, tenth = get_next_start()
+                        
+                        if start == -1
+                            still_running = false
+                            break
+                        end
+                        println("Processor ",p, " starts with: ", start)
+
+                        new_subm_path, improved, improved_by = remotecall_fetch(run_mip, p, start, cities, tenth, subm_path, N; max_time=max_mip_time, verbose=false)
+                        total_improved_by += improved_by
+                        println("Improvement per hour: ", total_improved_by*(3600/(time()-global_start_time)))
+                        println("Total run time: ", time()-global_start_time)
+                        println("Total improvement: ", total_improved_by)
+                        if improved
+                            subm_path[start+1:start+N] = new_subm_path[start+1:start+N]
+                            df = DataFrame(Path=subm_path.-1)
+                            CSV.write("submissions/"*path_fn_out, df);
+                        end
+                        !still_running && break
+                    end
+                end
+            end
         end
     end
 end

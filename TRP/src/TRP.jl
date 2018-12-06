@@ -58,7 +58,7 @@ function calc_score_with_extra(cities::Cities, list_path, tenth)
 end
 
 """
-    calc_score_with_extra(cities::Cities, list_path, tenth)
+    calc_score(cities::Cities, list_path, tenth)
 
 Calculate the santa score given a Cities object the path (or a subpath) and the correponding array with a one/true every tenth step.
 
