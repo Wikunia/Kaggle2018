@@ -294,6 +294,8 @@ function run_mip(start, cities, tenth, subm_path, N; max_time=100, verbose=false
             println("oldScore: ", calc_score(cities, subm_path, global_tenth))
             subm_path[start+1:start+N] = new_path 
             println("newScore: ", calc_score(cities, subm_path, global_tenth))
+        else
+            subm_path[start+1:start+N] = new_path 
         end
         improved = true
     else
