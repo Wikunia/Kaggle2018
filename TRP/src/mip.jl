@@ -356,10 +356,10 @@ function main_mip_parallel(path_fn_in, path_fn_out; from=0, to=197769, N=202, ma
 
     np = nprocs()
 
-    if path_fn_in[end-3:end] != ".csv"
+    if length(path_fn_in) <= 4 || path_fn_in[end-3:end] != ".csv"
         path_fn_in *= ".csv"
     end
-    if path_fn_out[end-3:end] != ".csv"
+    if length(path_fn_out) <= 4 || path_fn_out[end-3:end] != ".csv"
         path_fn_out *= ".csv"
     end
     cities, subm_path = read_cities_and_subm("cities_p.csv", "submissions/"*path_fn_in)
