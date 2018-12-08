@@ -40,6 +40,24 @@ if isinteractive() == false
     addprocs(args["processors"])
     println("Added "*string(args["processors"])*" processors")
     using TRP
-    TRP.main_mip_parallel(args["in"], args["out"]; from=args["start"],
-                          to=args["end"], N=args["length"], max_mip_time=args["max_time"])
+    N = args["length"]
+    stride = convert(Int, floor(N/5))
+    path_fn_in = args["in"]
+    path_fn_out = args["out"]
+    if length(path_fn_in) <= 4 || path_fn_in[end-3:end] != ".csv"
+        path_fn_in *= ".csv"
+    end
+    if length(path_fn_out) <= 4 || path_fn_out[end-3:end] != ".csv"
+        path_fn_out *= ".csv"
+    end
+    # copy in to out and then just work on out
+    cp("submissions/"*path_fn_in,"submissions/"*path_fn_out; force=true)
+
+    for s = 0:stride:N-stride
+        println("START with ", args["start"]+s)
+        flush(stdout)
+        TRP.main_mip_parallel(args["out"], args["out"]; from=args["start"]+s,
+                            to=args["end"], N=N, max_mip_time=args["max_time"])
+        println("FINISHED with ", args["start"]+s)
+    end
 end
