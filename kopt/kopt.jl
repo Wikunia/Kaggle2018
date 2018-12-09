@@ -1,7 +1,35 @@
-using Distances, CSV, NearestNeighbors, Combinatorics, IterTools, DataFrames
+using Distances, CSV, NearestNeighbors, Combinatorics, IterTools, DataFrames, ArgParse
+
+function get_args()
+    s = ArgParseSettings()
+
+    @add_arg_table s begin
+        "--cities", "-c"
+            help = "Input cities csv file (must include n_prime column)"
+            required = true
+        "--input", "-i"
+            help = "Input tour csv file"
+            required = true
+        "--output", "-o"
+            help = "Output tour csv file"
+            required = true
+        "--k", "-k"
+            help = "k as in k-opts"
+            arge_type = Int
+            required = true
+        "--neighbors", "-n"
+            help = "number of neighbors to consider each time"
+            default = 100
+            arg_type = Int64
+    end
+
+    return parse_args(s)
+end
+
+args = get_args()
 
 # Load city coordinates
-cities_csv = CSV.read("cities_p.csv");
+cities_csv = CSV.read(args["cities"]);
 cities_xy = zeros(size(cities_csv,1),2)
 cities_xy[:,1] = cities_csv[:X]
 cities_xy[:,2] = cities_csv[:Y]
@@ -9,7 +37,7 @@ cities_nprime = zeros(size(cities_csv,1))
 cities_nprime[:] = cities_csv[:nprime]
 
 # Load current tour
-tour_csv = CSV.read("tour.csv")
+tour_csv = CSV.read(args["input"])
 tour = tour_csv[:Path]
 # Add +1 to each city in the tour since arrays start at 1
 for i in 1:length(tour)
@@ -130,7 +158,7 @@ function kopt(num_opts, num_neighbors)
 				best_tour[i]-=1
 			end
 			df = DataFrame(Path=best_tour)
-        	CSV.write("new_tour.csv", df)
+        	CSV.write(args["output"], df)
 		end
 
 		t = time()-t
@@ -189,4 +217,4 @@ function permutations_repetition(v, n)
 end
 
 # 3-opt only considering 100 nearest neighbors
-kopt(3, 100)
+kopt(args["k"], args["neighbors"])
