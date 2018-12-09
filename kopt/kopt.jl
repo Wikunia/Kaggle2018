@@ -93,7 +93,7 @@ function kopt(num_opts, num_neighbors)
 			del_points = sort([i;neighbor_combinations[j]])
 
 			# Filter out deletion points that are direclty connected to each other
-			if combination_valid(del_points)
+			if del_valid(del_points)
 				
 				# Set subtours
 				for k in 1:num_subtours
