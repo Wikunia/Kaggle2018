@@ -15,7 +15,7 @@ function get_args()
             required = true
         "--k", "-k"
             help = "k as in k-opts"
-            arge_type = Int
+            arg_type = Int
             required = true
         "--neighbors", "-n"
             help = "number of neighbors to consider each time"
@@ -40,9 +40,7 @@ cities_nprime[:] = cities_csv[:nprime]
 tour_csv = CSV.read(args["input"])
 tour = tour_csv[:Path]
 # Add +1 to each city in the tour since arrays start at 1
-for i in 1:length(tour)
-	tour[i]+=1
-end
+tour .+= 1
 
 function kopt(num_opts, num_neighbors)
 

@@ -2,7 +2,7 @@
 
 ## Usage
 
-`kopt.jl --k [k (as in k-opts)] --n [number of nearest neighbors to consider] --c [cities csv file (must include n_prime column)] --i [input tour csv file] --o [output tour csv file]`
+`kopt.jl -k [k (as in k-opts)] -n [number of nearest neighbors to consider] -c [cities csv file (must include n_prime column)] -i [input tour csv file] -o [output tour csv file]`
 
 ## How does it work?
 
