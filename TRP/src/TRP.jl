@@ -79,5 +79,6 @@ function calc_score(cities, list_path, tenth)
 end
 
 include("mip.jl")
+include("kopt.jl")
 
 end
