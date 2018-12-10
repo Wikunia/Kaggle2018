@@ -2,11 +2,11 @@
 using Distances, NearestNeighbors, Combinatorics, IterTools
 
 function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
+	cities_xy = cities.xy
+    cities_nprime = cities.nprime
 
 	print("Finding all nearest neighbors...")
-    cities_xy = cities.xy
-    cities_nprime = cities.nprime
-    
+
 	# KDTree for finding nearest neighbor
 	# Need to swap dimensions of cities_xy for KDTree
 	cities_xy_kd = zeros(2,size(cities_xy, 1))
@@ -73,11 +73,11 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 				end
 
                 # Calculate score differential for k-opt swaps, only saving promising ones
-                swap = [del_points[1];neighbor_permutations[1];del_points[num_opts]+1]
-                tenth = [(s % 10) == 0 for s in swap[1]+1:swap[length(swap)]-2]
+				swap = [del_points[1];neighbor_permutations[1];del_points[num_opts]+1]
+				tenth = [(s % 10) == 0 for s in swap[1]:swap[length(swap)]-1]
 				base_score = calc_score(cities, get_swap_subtour(tour, swap, num_subtours), tenth)
 				for k in 2:size(neighbor_permutations,1)
-                    swap = [del_points[1];neighbor_permutations[k];del_points[num_opts]+1]
+					swap = [del_points[1];neighbor_permutations[k];del_points[num_opts]+1]
 					score_dif = base_score - calc_score(cities, get_swap_subtour(tour, swap, num_subtours), tenth)
                     if score_dif > 0
 						push!(swaps, swap)
@@ -128,14 +128,15 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 end
 
 function get_swap_subtour(tour, swap, num_subtours)
-    new_tour = []
+    new_tour = [tour[swap[1]]]
     for k in 1:num_subtours
         if swap[2*k] < swap[2*k+1]
             append!(new_tour, tour[swap[2*k]:swap[2*k+1]])
         else
             append!(new_tour, reverse(tour[swap[2*k+1]:swap[2*k]]))
         end
-    end
+	end
+	append!(new_tour, tour[swap[length(swap)]])
     return new_tour
 end
 
