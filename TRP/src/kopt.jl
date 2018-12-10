@@ -115,11 +115,9 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 		if best_gain > 0
 			total_gain += best_gain
 			current_score -= best_gain
-			for i in 1:length(best_tour)
-				best_tour[i]-=1
-			end
-			df = DataFrame(Path=best_tour)
-        	CSV.write("submissions/"*path_fn_out, df)
+			tour = best_tour[:]
+			df = DataFrame(Path=best_tour .-= 1)
+			CSV.write("submissions/"*path_fn_out, df)
 		end
 
 		t = time()-t
