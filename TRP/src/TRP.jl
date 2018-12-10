@@ -73,11 +73,12 @@ function calc_score(cities, list_path, tenth)
     
     # List of Primes 0 to (len_path-1)
     # Flag array, is path's from-city number non-prime?
-    @views is_path_from_non_prime   = cities.nprime[list_path][1:end-1]   
+    @views is_path_from_non_prime   = cities.nprime[list_path[1:end-1]]
     # If both flags are true, *1.1, else * 1.0
     return sum(dist_path .* (1.0 .+ 0.1 .* is_path_from_non_prime .* tenth))
 end
 
 include("mip.jl")
+include("kopt.jl")
 
 end
