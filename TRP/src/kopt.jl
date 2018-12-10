@@ -1,51 +1,12 @@
-using Distances, CSV, NearestNeighbors, Combinatorics, IterTools, DataFrames, ArgParse
 
-function get_args()
-    s = ArgParseSettings()
+using Distances, NearestNeighbors, Combinatorics, IterTools
 
-    @add_arg_table s begin
-        "--cities", "-c"
-            help = "Input cities csv file (must include n_prime column)"
-            required = true
-        "--input", "-i"
-            help = "Input tour csv file"
-            required = true
-        "--output", "-o"
-            help = "Output tour csv file"
-            required = true
-        "--k", "-k"
-            help = "k as in k-opts"
-            arg_type = Int
-            required = true
-        "--neighbors", "-n"
-            help = "number of neighbors to consider each time"
-            default = 100
-            arg_type = Int64
-    end
-
-    return parse_args(s)
-end
-
-args = get_args()
-
-# Load city coordinates
-cities_csv = CSV.read(args["cities"]);
-cities_xy = zeros(size(cities_csv,1),2)
-cities_xy[:,1] = cities_csv[:X]
-cities_xy[:,2] = cities_csv[:Y]
-cities_nprime = zeros(size(cities_csv,1))
-cities_nprime[:] = cities_csv[:nprime]
-
-# Load current tour
-tour_csv = CSV.read(args["input"])
-tour = tour_csv[:Path]
-# Add +1 to each city in the tour since arrays start at 1
-tour .+= 1
-
-function kopt(num_opts, num_neighbors)
+function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
+	cities_xy = cities.xy
+    cities_nprime = cities.nprime
 
 	print("Finding all nearest neighbors...")
-	
+
 	# KDTree for finding nearest neighbor
 	# Need to swap dimensions of cities_xy for KDTree
 	cities_xy_kd = zeros(2,size(cities_xy, 1))
@@ -64,7 +25,7 @@ function kopt(num_opts, num_neighbors)
 	println(" Done.")
 
 	# Set parameters
-	current_score = score_tour(tour)
+	current_score = score_tour(cities_xy, cities_nprime, tour)
 	num_subtours = num_opts-1
 	subtours = zeros(Int, 2, num_subtours, 2)
 	subtours_pos = collect(permutations(collect(1:num_subtours)))
@@ -73,7 +34,7 @@ function kopt(num_opts, num_neighbors)
 	total_gain = 0.0
 
 	# Iterate through each city in tour
-	for i in 1:length(tour)-1
+	for i in 1:105900
 		t = time()
 
 		# Find nearest neighbors
@@ -111,12 +72,16 @@ function kopt(num_opts, num_neighbors)
 					end
 				end
 
-				# Calculate score differential for k-opt swaps, only saving promising ones
-				base_score = score_swap([del_points[1];neighbor_permutations[1];del_points[num_opts]+1])
+                # Calculate score differential for k-opt swaps, only saving promising ones
+				swap = [del_points[1];neighbor_permutations[1];del_points[num_opts]+1]
+				tenth = [(s % 10) == 0 for s in swap[1]:swap[length(swap)]-1]
+				base_score = calc_score(cities, get_swap_subtour(tour, swap, num_subtours), tenth)
 				for k in 2:size(neighbor_permutations,1)
 					swap = [del_points[1];neighbor_permutations[k];del_points[num_opts]+1]
-					score_dif = base_score - score_swap(swap)
-					if score_dif > 0
+					swap_subtour = get_swap_subtour(tour, swap, num_subtours)
+					score_dif = base_score - calc_score(cities, swap_subtour, tenth)
+					# println("======================================================")
+                    if score_dif > 0
 						push!(swaps, swap)
 					end
 				end
@@ -141,7 +106,7 @@ function kopt(num_opts, num_neighbors)
 			end
 			append!(new_tour, tour[swap[length(swap)]:length(tour)])
 
-            gain = current_score - score_tour(new_tour)
+            gain = current_score - score_tour(cities_xy, cities_nprime, new_tour)
 			if gain > best_gain
 				best_gain = gain
 				best_tour = new_tour
@@ -152,16 +117,33 @@ function kopt(num_opts, num_neighbors)
 		if best_gain > 0
 			total_gain += best_gain
 			current_score -= best_gain
-			for i in 1:length(best_tour)
-				best_tour[i]-=1
-			end
-			df = DataFrame(Path=best_tour)
-        	CSV.write(args["output"], df)
+			tour = best_tour[:]
+			df = DataFrame(Path=best_tour .-= 1)
+			CSV.write("submissions/"*path_fn_out, df)
 		end
 
 		t = time()-t
 		println("i: $i, total promising swaps: $total_promising_swaps, total gain: $total_gain, time for one i: $t")
 	end
+end
+
+function get_swap_subtour(tour, swap, num_subtours)
+	len_subtour = swap[length(swap)]-swap[1]+1
+	new_tour = zeros(Int, len_subtour)
+	new_tour[1] = tour[swap[1]]
+	c = 2
+	for k in 1:num_subtours
+		swap2k, swap2k1 = swap[2*k], swap[2*k+1]
+        if swap2k < swap2k1
+			new_tour[c:c+swap2k1-swap2k] = tour[swap2k:swap2k1]
+			c += swap2k1-swap2k+1
+        else
+			new_tour[c:c+swap2k-swap2k1] = reverse(tour[swap2k1:swap2k])
+			c += swap2k-swap2k1+1
+        end
+	end
+	new_tour[end] = tour[swap[length(swap)]]
+    return new_tour
 end
 
 function length_of_swap(num_subtours, swap)
@@ -176,7 +158,7 @@ function length_of_swap(num_subtours, swap)
 	return tour_length
 end
 
-function score_swap(swap)
+function score_swap(cities_xy, tour, swap)
 	score = 0.0
 	for i in 1:Int(size(swap, 1)/2)
 		p1 = [cities_xy[tour[swap[2*i-1]],1], cities_xy[tour[swap[2*i-1]],2]]
@@ -186,7 +168,7 @@ function score_swap(swap)
 	return score
 end
 
-function score_tour(scored_tour)
+function score_tour(cities_xy, cities_nprime, scored_tour)
 	score = 0.0
 	for i in 1:length(scored_tour)-1
 		p1 = [cities_xy[scored_tour[i],1], cities_xy[scored_tour[i],2]]
@@ -226,5 +208,11 @@ function permutations_repetition(v, n)
   return a
 end
 
-# 3-opt only considering 100 nearest neighbors
-kopt(args["k"], args["neighbors"])
+function main_kopt(path_fn_in, path_fn_out, k; neighbors = 100)
+    # Load city coordinates and tour
+    cities, tour = read_cities_and_subm("cities_p.csv", "submissions/"*path_fn_in)
+
+    # k-opt only considering neighbors nearest neighbors
+    kopt(cities, tour, k, neighbors, path_fn_out)
+end
+
