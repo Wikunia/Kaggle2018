@@ -34,7 +34,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 	total_gain = 0.0
 
 	# Iterate through each city in tour
-	for i in 105900:length(tour)-1
+	for i in 1:105900
 		t = time()
 
 		# Find nearest neighbors
@@ -78,7 +78,9 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 				base_score = calc_score(cities, get_swap_subtour(tour, swap, num_subtours), tenth)
 				for k in 2:size(neighbor_permutations,1)
 					swap = [del_points[1];neighbor_permutations[k];del_points[num_opts]+1]
-					score_dif = base_score - calc_score(cities, get_swap_subtour(tour, swap, num_subtours), tenth)
+					swap_subtour = get_swap_subtour(tour, swap, num_subtours)
+					score_dif = base_score - calc_score(cities, swap_subtour, tenth)
+					# println("======================================================")
                     if score_dif > 0
 						push!(swaps, swap)
 					end
@@ -126,15 +128,21 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 end
 
 function get_swap_subtour(tour, swap, num_subtours)
-    new_tour = [tour[swap[1]]]
-    for k in 1:num_subtours
-        if swap[2*k] < swap[2*k+1]
-            append!(new_tour, tour[swap[2*k]:swap[2*k+1]])
+	len_subtour = swap[length(swap)]-swap[1]+1
+	new_tour = zeros(Int, len_subtour)
+	new_tour[1] = tour[swap[1]]
+	c = 2
+	for k in 1:num_subtours
+		swap2k, swap2k1 = swap[2*k], swap[2*k+1]
+        if swap2k < swap2k1
+			new_tour[c:c+swap2k1-swap2k] = tour[swap2k:swap2k1]
+			c += swap2k1-swap2k+1
         else
-            append!(new_tour, reverse(tour[swap[2*k+1]:swap[2*k]]))
+			new_tour[c:c+swap2k-swap2k1] = reverse(tour[swap2k1:swap2k])
+			c += swap2k-swap2k1+1
         end
 	end
-	append!(new_tour, tour[swap[length(swap)]])
+	new_tour[end] = tour[swap[length(swap)]]
     return new_tour
 end
 
