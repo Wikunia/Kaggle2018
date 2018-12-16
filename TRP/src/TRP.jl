@@ -115,23 +115,64 @@ function calc_score(precomputed::Vector{Vector{Float64}}, mod_from::Int, from::I
     return precomputed[mod][from] - precomputed[mod][to]
 end
 
-function calc_score(cities::Cities, tour::Vector, precomputed::Vector{Vector{Float64}},
-    rev_precomputed::Vector{Vector{Float64}}, swap::Vector, euc_dict::Dict{Tuple{Int,Int},Float64})
-    @views cities_xy = cities.xy
+"""
+    improved_score_by(cities::Cities, tour::Vector, precomputed::Vector{Vector{Float64}},
+        rev_precomputed::Vector{Vector{Float64}}, swap::Vector, euc_dict::Dict{Tuple{Int,Int},Float64}, base_score::Float64)
 
-    score = 0.0
+Return -1 if not improved (maybe on early break) otherwise return by how much it improved compared to base_score
+"""
+function improved_score_by(cities::Cities, tour::Vector, precomputed::Vector{Vector{Float64}},
+    rev_precomputed::Vector{Vector{Float64}}, swap::Vector, euc_dict::Dict{Tuple{Int,Int},Float64}, base_score::Float64)
+    @views cities_xy = cities.xy
+    # global euc_time, subpath_time
+
     cfrom = swap[1]
+    score = 0.0
     ltour = length(tour)
-    
+    lswap = length(swap)
+    # half length same as Int(floor(lswap/2)) but faster
+    hlswap = fld(lswap,2)
+    cfroms = Vector{Int}(undef, hlswap)
+    cfroms[1] = cfrom
+
     # println("swap: ", swap)
-    for i in 1:Int(size(swap, 1)/2)
+    for i in 1:hlswap-1
+        # s_time = time_ns()
         i2 = 2*i
         i2m1 = i2-1
         i2p1 = i2+1
-        # println("i: ", i)
+
+        # for the swap edge each time
+        cfrom += 1
+
+        # tours between swap edges
+        if swap[i2] < swap[i2p1]
+            t1 = (swap[i2]-cfrom+10000000) % 10 + 1
+            new_scoring = calc_score(precomputed, t1, swap[i2], swap[i2p1])
+            cfrom += swap[i2p1]-swap[i2]
+            score += new_scoring
+        else
+            t1 = ((1+ltour-swap[i2])-cfrom+10000000) % 10 + 1
+            new_scoring = calc_score(rev_precomputed, t1,
+                                    1+ltour-swap[i2], 1+ltour-swap[i2p1])
+            score += new_scoring
+            cfrom += swap[i2]-swap[i2p1]
+        end
+        cfroms[i+1] = cfrom
+        # subpath_time += time_ns()-s_time
+
+        if score > base_score
+            return -1
+        end
+    end
+
+    for i=1:hlswap
+        # e_time = time_ns()
+        i2 = 2*i
+        i2m1 = i2-1
+        i2p1 = i2+1
+        
         # swap edge
-        # p1 = [cities_xy[tour[swap[2*i-1]],1], cities_xy[tour[swap[2*i-1]],2]]
-        # p2 = [cities_xy[tour[swap[2*i]],1], cities_xy[tour[swap[2*i]],2]]
         dist = 0.0
         tpl = (swap[i2m1],swap[i2])
         if haskey(euc_dict,tpl)
@@ -140,51 +181,18 @@ function calc_score(cities::Cities, tour::Vector, precomputed::Vector{Vector{Flo
             dist = euclidean(cities_xy[tour[swap[i2m1]],:],cities_xy[tour[swap[i2]],:])
             euc_dict[tpl] = dist
         end
-        if cfrom % 10 == 0 && cities.nprime[tour[swap[i2m1]]] == 1.0
+        if cfroms[i] % 10 == 0 && cities.nprime[tour[swap[i2m1]]] == 1.0
             dist *= 1.1
         end
-            
-        score += dist
-        # println("cfrom before: ", cfrom)
         
-        cfrom += 1
+        score += dist
+        # euc_time += time_ns()-e_time
 
-        # tours between swap edges
-        if i2p1 <= length(swap)
-            if swap[i2] < swap[i2p1]
-                t1 = (swap[i2]-cfrom+10000000) % 10 + 1
-                # println("cfrom: ", cfrom, " from: ", swap[i2], " to: ", swap[i2p1])
-                new_scoring = calc_score(precomputed, t1, swap[i2], swap[i2p1])
-                # old_scoring = calc_score(cities, tour[swap[i2]:swap[i2p1]], temp_tenth)
-                # println("new-old: ", new_scoring - old_scoring)
-                # @assert isapprox(new_scoring, old_scoring)
-                #=for f=1:10
-                    temp_scoring = calc_score(precomputed, f, swap[i2], swap[i2p1])
-                    println("temp_scoring-new_scoring: ", temp_scoring-new_scoring)
-                end=#
-                cfrom += swap[i2p1]-swap[i2]
-                score += new_scoring
-            else
-                # e_time = time_ns()        
-                t1 = ((1+ltour-swap[i2])-cfrom+10000000) % 10 + 1
-                # println("t1: ", t1)
-                new_scoring = calc_score(rev_precomputed, t1,
-                                        1+ltour-swap[i2], 1+ltour-swap[i2p1])
-                #=for f=1:10
-                    temp_scoring = calc_score(rev_precomputed, f,
-                        1+ltour-swap[i2], 1+ltour-swap[i2p1])
-                    println("temp_scoring-new_scoring: ", temp_scoring-new_scoring)
-                end=#
-                score += new_scoring
-                # println("new_scoring: ", new_scoring)
-                cfrom += swap[i2]-swap[i2p1]
-                # euc_time += time_ns()-e_time
-
-            end
+        if score > base_score
+            return -1
         end
-        # println("cfrom end: ", cfrom)
     end
-    return score
+    return base_score - score
 end
 
 """

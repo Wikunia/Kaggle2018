@@ -1,7 +1,7 @@
 
 using Distances, NearestNeighbors, Combinatorics, IterTools
 
-function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
+function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 	function init()
 		print("Finding all nearest neighbors...")
 
@@ -30,10 +30,12 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 		gtenth = [(i % 10) == 0 for i in 1:length(tour)-1]
 		forward_dists, forward_extras = calc_score_dists_and_extras(cities, tour, gtenth)
 		tour_santa_score[1] = rev_cumsum(forward_dists .+ forward_extras)
+		push!(tour_santa_score[1], 0.0)
 		println("tour_santa_score[1][1]: ", tour_santa_score[1][1])
 		for k = 1:9
 			temp_tenth = [(i % 10) == k for i in 1:length(tour)-1]
 			tour_santa_score[k+1] = rev_cumsum(forward_dists .+ calc_score_extras(cities, tour, temp_tenth, forward_dists))
+			push!(tour_santa_score[k+1], 0.0)
 		end
 
 
@@ -41,9 +43,11 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 		rev_tour = reverse(tour)
 		backward_dists, backward_extras = calc_score_dists_and_extras(cities, rev_tour, gtenth)
 		rev_tour_santa_score[1] = rev_cumsum(backward_dists .+ backward_extras)
+		push!(rev_tour_santa_score[1], 0.0)
 		for k = 1:9
 			temp_tenth = [(i % 10) == k for i in 1:length(tour)-1]
 			rev_tour_santa_score[k+1] = rev_cumsum(backward_dists .+ calc_score_extras(cities, rev_tour, temp_tenth, backward_dists))
+			push!(rev_tour_santa_score[k+1], 0.0)
 		end
 		println(" Done.")
 
@@ -65,7 +69,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 	nd_subtours_pos = size(d_subtours_pos, 1)
 	nneighbor_perms = nsubtours_pos*nd_subtours_pos
 	total_promising_swaps = 0
-	total_pos_heuristic = 0
+	total_scorings = 0
 	total_gain = 0.0
 	total_time = time()
 
@@ -73,7 +77,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 	permutation = Vector{Int}(undef, 2*num_subtours)
 
 	# Iterate through each city in tour
-	for i in 40000:length(tour)-1
+	for i in list_of_i
 		t = time()
 		best_swap_score = 0.0
 
@@ -93,51 +97,32 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 
 			# Filter out deletion points that are direclty connected to each other
 			if del_valid(del_points)
-				
 				# Set subtours
 				for k in 1:num_subtours
 					subtours[1,k,1], subtours[1,k,2] = del_points[k]+1,del_points[k+1] 
 					subtours[2,k,1:2] = reverse(subtours[1,k,1:2])
 				end
-
+				
 				# Generate all possible k-opt swaps by rearranging subtours
 				kl = 1
 				@inbounds for k in 1:nsubtours_pos
 					for l in 1:nd_subtours_pos
 						for m in 1:num_subtours
-							permutation[2*m-1:2*m] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 1:2]
+							@views permutation[2*m-1:2*m] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 1:2]
 						end
 						neighbor_permutations[kl] = permutation[:]
 						kl += 1
 					end
 				end		
 
-                # Calculate score differential for k-opt swaps, only saving promising ones
+                # Calculate score differential for k-opt swaps, only saving the best swap
 				swap = [del_points[1];neighbor_permutations[1];del_points[num_opts]+1]
-				# tenth = [(s % 10) == 0 for s in swap[1]:swap[length(swap)]-1]
-				# base_score, base_extra, base_min_extra = c5optalc_score_with_extra(cities, get_swap_subtour(tour, swap, num_subtours), tenth)
-				base_score = calc_score(cities, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict)
-				# println("base score: ", base_score)
-				# println("base score1: ", base_score1)
-				# println("abs(diff): ", abs(base_score-base_score1))
-				# @assert isapprox(base_score,base_score1)
-				# base_euc_score = score_swap(cities_xy, tour, swap)
+				base_score = calc_score(tour_santa_score, 1, swap[1], swap[end])
 				for k in 2:size(neighbor_permutations,1)
 					@inbounds swap[2:end-1] = neighbor_permutations[k]
-					# println("swap: ", swap)
-					# println("swap: ", swap)
-					total_pos_heuristic += 1
-					# swap_subtour = get_swap_subtour(tour, swap, num_subtours)
-					# old_score = calc_score(cities, swap_subtour, tenth)
-					new_score = calc_score(cities, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict)
-					# err
-					# println("old score: ", old_score)
-					# println("new score: ", new_score)
-					# println("abs(diff): ", abs(old_score-new_score))
-					# @assert isapprox(old_score,new_score)
-					score_dif = base_score-new_score
-					# println("score_dif: ", score_dif)
-					# println("======================================================")
+					total_scorings += 1
+					# calculate how much the score improves with this swap (Returns -1 if no improvement)
+					score_dif = improved_score_by(cities, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict, base_score)
 					if score_dif > best_swap_score
 						best_swap_score = score_dif
 						swaps[1] = copy(swap)
@@ -173,6 +158,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 			end
 
 			# Set current tour to best k-opt swap
+			
 			if best_gain > 0
 				total_gain += best_gain
 				current_score -= best_gain
@@ -184,10 +170,10 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out)
 		end
 
 		t = time()-t
-		println("i: $i, total pos heuristic: $total_pos_heuristic, total promising swaps: $total_promising_swaps, total gain: $total_gain, time for one i: $t")
+		println("i: $i, total pos heuristic: $total_scorings, total promising swaps: $total_promising_swaps, total gain: $total_gain, time for one i: $t")
 		if i % 10 == 0
 			tt = time() - total_time
-			println("Total time for $total_pos_heuristic checks: ", tt, " that are  ", total_pos_heuristic/tt, " checks per second.")
+			println("Total time for $total_scorings checks: ", tt, " that are  ", total_scorings/tt, " checks per second.")
 		end
 		flush(stdout)
 	end
@@ -266,11 +252,15 @@ function permutations_repetition(v, n)
   return a
 end
 
-function main_kopt(path_fn_in, path_fn_out, k; neighbors = 100)
-    # Load city coordinates and tour
+function main_kopt(path_fn_in, path_fn_out, k; list_of_i=undef, neighbors = 100)
+	# Load city coordinates and tour
     cities, tour = read_cities_and_subm("cities_p.csv", "submissions/"*path_fn_in)
 
+	if list_of_i == undef
+		list_of_i = 1:197769
+	end
+
     # k-opt only considering neighbors nearest neighbors
-    kopt(cities, tour, k, neighbors, path_fn_out)
+    kopt(cities, tour, k, neighbors, path_fn_out, list_of_i)
 end
 
