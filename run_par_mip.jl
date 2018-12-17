@@ -53,11 +53,10 @@ if isinteractive() == false
     # copy in to out and then just work on out
     cp("submissions/"*path_fn_in,"submissions/"*path_fn_out; force=true)
 
-    for s = 0:stride:N-stride
-        println("START with ", args["start"]+s)
-        flush(stdout)
-        TRP.main_mip_parallel(args["out"], args["out"]; from=args["start"]+s,
-                            to=args["end"], N=N, max_mip_time=args["max_time"])
-        println("FINISHED with ", args["start"]+s)
-    end
+    s=0
+    println("START with ", args["start"]+s)
+    flush(stdout)
+    TRP.main_mip_parallel(args["out"], args["out"]; from=args["start"]+s,
+                        to=args["end"], N=N, max_mip_time=args["max_time"])
+    println("FINISHED with ", args["start"]+s)
 end
