@@ -73,11 +73,11 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 	total_gain = 0.0
 	total_time = time()
 
-	neighbor_permutations = Vector{Vector{Int}}(undef, nneighbor_perms)
+	neighbor_permutations = zeros(Int, nneighbor_perms, 8)
 	permutation = Vector{Int}(undef, 2*num_subtours)
 
 	# Iterate through each city in tour
-	for i in list_of_i
+	@inbounds for i in list_of_i
 		t = time()
 		best_swap_score = 0.0
 
@@ -90,6 +90,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 		# Generate all possible k-1 neighbor combinations
 		neighbor_combinations = collect(subsets(neighbor_pos, num_subtours))
 		# For each combination
+		tc = 0.0
 		for j in 1:size(neighbor_combinations, 1)
 
 			# Sort deletion points (first city in each edge)
@@ -103,33 +104,36 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 					subtours[2,k,1:2] = reverse(subtours[1,k,1:2])
 				end
 				
-				# Generate all possible k-opt swaps by rearranging subtours
-				kl = 1
-				@inbounds for k in 1:nsubtours_pos
-					for l in 1:nd_subtours_pos
-						for m in 1:num_subtours
-							@views permutation[2*m-1:2*m] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 1:2]
-						end
-						neighbor_permutations[kl] = permutation[:]
-						kl += 1
-					end
-				end		
-
-                # Calculate score differential for k-opt swaps, only saving the best swap
-				swap = [del_points[1];neighbor_permutations[1];del_points[num_opts]+1]
+				for m in 1:num_subtours
+					permutation[2*m-1:2*m] = subtours[d_subtours_pos[1,], subtours_pos[1][m], 1:2]
+				end
+				# current base score
+				swap = [del_points[1];permutation;del_points[num_opts]+1]
 				base_score = calc_score(tour_santa_score, 1, swap[1], swap[end])
-				for k in 2:size(neighbor_permutations,1)
-					@inbounds swap[2:end-1] = neighbor_permutations[k]
-					total_scorings += 1
-					# calculate how much the score improves with this swap (Returns -1 if no improvement)
-					score_dif = improved_score_by(cities, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict, base_score)
-					if score_dif > best_swap_score
-						best_swap_score = score_dif
-						swaps[1] = copy(swap)
+				# Generate all possible k-opt swaps by rearranging subtours
+				# Calculate score differential for k-opt swaps, only saving the best swap
+				total_scorings += nsubtours_pos*nd_subtours_pos-1
+				for k in 1:nsubtours_pos
+					for l in 1:nd_subtours_pos
+						if k == 1 && l == 1
+							continue
+						end 
+						for m in 1:num_subtours
+							permutation[2*m-1] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 1]
+							permutation[2*m] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 2]
+						end
+						swap[2:end-1] = permutation
+						
+						score_dif = base_score-calc_score(cities, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict)
+						if score_dif > best_swap_score
+							best_swap_score = score_dif
+							swaps[1] = copy(swap)
+						end
 					end
 				end
 			end
 		end
+		# println(tc)
 
 		# Fully score each promising k-opt swap
 		best_gain = 0.0
