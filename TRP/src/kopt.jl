@@ -73,8 +73,13 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 	total_gain = 0.0
 	total_time = time()
 
-	neighbor_permutations = zeros(Int, nneighbor_perms, 8)
-	permutation = Vector{Int}(undef, 2*num_subtours)
+	swap = Vector{Int}(undef, 2+2*num_subtours)
+	hlswap = fld(2+2*num_subtours, 2)
+	cfroms = Vector{Int}(undef, hlswap)
+	ltour = length(tour)
+    ltour1 = 1+ltour
+    lswap = length(swap)
+    hlswap = fld(lswap, 2)
 
 	# Iterate through each city in tour
 	@inbounds for i in list_of_i
@@ -85,7 +90,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 		neighbor_pos = nearest_neighbors[i,1:num_neighbors]
 
 		# Find all promising k-opt swaps
-		swaps = Vector{Vector{Int}}(undef,1)
+		best_swap = Vector{Int}(undef, 2+2*num_subtours)
 
 		# Generate all possible k-1 neighbor combinations
 		neighbor_combinations = collect(subsets(neighbor_pos, num_subtours))
@@ -104,65 +109,65 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 					subtours[2,k,1:2] = reverse(subtours[1,k,1:2])
 				end
 				
+				swap[1] = del_points[1]
+				swap[end] = del_points[num_opts]+1
 				for m in 1:num_subtours
-					permutation[2*m-1:2*m] = subtours[d_subtours_pos[1,], subtours_pos[1][m], 1:2]
+					swap[2*m] = subtours[d_subtours_pos[1,], subtours_pos[1][m], 1]
+					swap[2*m+1] = subtours[d_subtours_pos[1,], subtours_pos[1][m], 2]
 				end
 				# current base score
-				swap = [del_points[1];permutation;del_points[num_opts]+1]
 				base_score = calc_score(tour_santa_score, 1, swap[1], swap[end])
 				# Generate all possible k-opt swaps by rearranging subtours
 				# Calculate score differential for k-opt swaps, only saving the best swap
 				total_scorings += nsubtours_pos*nd_subtours_pos-1
 				for k in 1:nsubtours_pos
-					for l in 1:nd_subtours_pos
-						if k == 1 && l == 1
-							continue
-						end 
+					# don't calculate the base score again
+					if k == 1
+						lrange = 2:nd_subtours_pos
+					else
+						lrange = 1:nd_subtours_pos
+					end
+					for l in lrange
+						# calculate the current swap don't changing del points (first and last in swap)
+						# this is faster than setting swap[2*m:2*m+1] =  subtours[..,..,1:2]
 						for m in 1:num_subtours
-							permutation[2*m-1] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 1]
-							permutation[2*m] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 2]
+							swap[2*m] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 1]
+							swap[2*m+1] = subtours[d_subtours_pos[l,m], subtours_pos[k][m], 2]
 						end
-						swap[2:end-1] = permutation
-						
-						score_dif = base_score-calc_score(cities, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict)
+						score_dif = improved_by!(cfroms, cities_xy, cities_nprime, tour, tour_santa_score, rev_tour_santa_score, swap, euc_dict, base_score,
+												ltour,ltour1,lswap,hlswap)
 						if score_dif > best_swap_score
 							best_swap_score = score_dif
-							swaps[1] = copy(swap)
+							best_swap = copy(swap)
 						end
 					end
 				end
 			end
 		end
-		# println(tc)
 
 		# Fully score each promising k-opt swap
 		best_gain = 0.0
-		best_tour = []
 		if best_swap_score > 0
 			total_promising_swaps += 1
-			for j in 1:size(swaps, 1)
-				swap = swaps[j]
 
-				# Generate full tour from swap
-				new_tour = tour[1:swap[1]]
-				for k in 1:num_subtours
-					if swap[2*k] < swap[2*k+1]
-						append!(new_tour, tour[swap[2*k]:swap[2*k+1]])
-					else
-						append!(new_tour, reverse(tour[swap[2*k+1]:swap[2*k]]))
-					end
-				end
-				append!(new_tour, tour[swap[length(swap)]:length(tour)])
-
-        	    gain = current_score - score_tour(cities_xy, cities_nprime, new_tour)
-				if gain > best_gain
-					best_gain = gain
-					best_tour = new_tour
+			# Generate full tour from swap
+			best_tour = tour[:]
+			pos = swap[1]+1
+			for k in 1:num_subtours
+				if best_swap[2*k] < best_swap[2*k+1]
+					best_tour[pos:pos+best_swap[2*k+1]-best_swap[2*k]] = tour[best_swap[2*k]:best_swap[2*k+1]]
+					pos += best_swap[2*k+1]-best_swap[2*k]+1
+				else
+					best_tour[pos:pos+best_swap[2*k]-best_swap[2*k+1]] = reverse(tour[best_swap[2*k+1]:best_swap[2*k]])
+					pos += best_swap[2*k]-best_swap[2*k+1]+1
 				end
 			end
 
-			# Set current tour to best k-opt swap
+			# compute with better accuracy
+			best_gain = current_score - score_tour(cities_xy, cities_nprime, best_tour)
 			
+
+			# Set current tour to best k-opt swap
 			if best_gain > 0
 				total_gain += best_gain
 				current_score -= best_gain

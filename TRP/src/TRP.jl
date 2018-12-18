@@ -111,51 +111,67 @@ function calc_score(precomputed::Vector{Vector{Float64}}, mod_from::Int, from::I
     return precomputed[mod_from][from] - precomputed[mod_from][to]
 end
 
-function calc_score(cities::Cities, tour::Vector{Int}, precomputed::Vector{Vector{Float64}},
-    rev_precomputed::Vector{Vector{Float64}}, swap::Vector{Int}, euc_dict::Dict{Tuple{Int,Int},Float64})
-    @views cities_xy = cities.xy
-    @views cities_nprime = cities.nprime
+"""
+    improved_by!(cfroms::Vector{Int}, cities::Cities, tour::Vector{Int}, precomputed::Vector{Vector{Float64}},
+        rev_precomputed::Vector{Vector{Float64}}, swap::Vector{Int}, euc_dict::Dict{Tuple{Int,Int},Float64}, base_score::Float64,
+        ltour::Int,ltour1::Int,lswap::Int,hlswap::Int
+        )
 
+This function is highly optimized therefore a lot of parameters are used.
+Return the improved of a swap compared to the base score. Return -1 if no improvement was achieved (early break)
+"""
+function improved_by!(cfroms::Vector{Int}, cities_xy::Array{Float64,2}, cities_nprime::Vector{Float64}, tour::Vector{Int}, precomputed::Vector{Vector{Float64}},
+        rev_precomputed::Vector{Vector{Float64}}, swap::Vector{Int}, euc_dict::Dict{Tuple{Int,Int},Float64}, base_score::Float64,
+        ltour::Int,ltour1::Int,lswap::Int,hlswap::Int
+    )
     score = 0.0
     cfrom = swap[1]
-    ltour = length(tour)
-    ltour1 = 1+ltour
-    lswap = length(swap)
-    hlswap = fld(lswap, 2)
-    
+
+    # calculate the long subpaths first as it's faster to calculate
+    for i in 1:hlswap-1
+        cfroms[i] = cfrom 
+        i2 = 2*i
+        i2p1 = i2+1
+            
+        cfrom += 1
+
+        # tours between swap edges
+        if swap[i2] < swap[i2p1]
+            # + 10000000 because it can be negative
+            t1 = (swap[i2]-cfrom+10000000) % 10 + 1
+            cfrom += swap[i2p1]-swap[i2]
+            score += calc_score(precomputed, t1, swap[i2], swap[i2p1])
+        else
+            t1 = ((ltour1-swap[i2])-cfrom+10000000) % 10 + 1
+            score += calc_score(rev_precomputed, t1,  ltour1-swap[i2], ltour1-swap[i2p1])
+            cfrom += swap[i2]-swap[i2p1]
+        end
+    end
+    if score > base_score
+        return -1
+    end
+    cfroms[hlswap] = cfrom 
+
+    # calculate the single swap edges if the path can still be better
     for i in 1:hlswap
         i2 = 2*i
         i2m1 = i2-1
-        i2p1 = i2+1
         # swap edge
         dist = get(euc_dict, (swap[i2m1],swap[i2]), 0.0)
         if dist == 0.0
             dist = euclidean(cities_xy[tour[swap[i2m1]],:],cities_xy[tour[swap[i2]],:])
             euc_dict[(swap[i2m1],swap[i2])] = dist
         end
-        if cfrom % 10 == 0 && cities_nprime[tour[swap[i2m1]]] == 1.0
+        if cfroms[i] % 10 == 0 && cities_nprime[tour[swap[i2m1]]] == 1.0
             dist *= 1.1
         end
             
         score += dist
-        
-        cfrom += 1
-
-        # tours between swap edges
-        if i2p1 <= lswap
-            if swap[i2] < swap[i2p1]
-                # + 10000000 because it can be negative
-                t1 = (swap[i2]-cfrom+10000000) % 10 + 1
-                cfrom += swap[i2p1]-swap[i2]
-                score += calc_score(precomputed, t1, swap[i2], swap[i2p1])
-            else
-                t1 = ((ltour1-swap[i2])-cfrom+10000000) % 10 + 1
-                score += calc_score(rev_precomputed, t1,  ltour1-swap[i2], ltour1-swap[i2p1])
-                cfrom += swap[i2]-swap[i2p1]
-            end
+        if score > base_score
+            return -1
         end
     end
-    return score
+    return base_score-score
 end
 
 """
