@@ -148,7 +148,7 @@ function improved_by!(cfroms::Vector{Int}, cities_xy::Array{Float64,2}, cities_n
         end
     end
     if score > base_score
-        return -1
+        return -1.0
     end
     cfroms[hlswap] = cfrom 
 
@@ -168,7 +168,7 @@ function improved_by!(cfroms::Vector{Int}, cities_xy::Array{Float64,2}, cities_n
             
         score += dist
         if score > base_score
-            return -1
+            return -1.0
         end
     end
     return base_score-score
