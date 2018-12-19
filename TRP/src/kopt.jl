@@ -16,9 +16,10 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 		# Filter and store KDTree results for easy access
 		nearest_neighbors = zeros(Int, length(tour)-1, num_neighbors)
 		for i in 1:length(tour)-1
-			neighbors, _ = knn(kdtree, cities_xy[tour[i], 1:2], num_neighbors+7, true)
-			filter!(x->(x < i-3 || x > i+3), neighbors)
-			nearest_neighbors[i,1:num_neighbors] = neighbors[1:num_neighbors]
+			neighbors, _ = knn(kdtree, cities_xy[tour[i], 1:2], num_neighbors+100, true)
+			filter!(x->(x > i+3), neighbors)
+			min_length = min(length(neighbors), num_neighbors)
+			nearest_neighbors[i,1:min_length] = neighbors[1:min_length]
 		end
 		println(" Done.")
 
@@ -88,6 +89,10 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 
 		# Find nearest neighbors
 		neighbor_pos = nearest_neighbors[i,1:num_neighbors]
+		found_zero_pos = findfirst(x->x==0, neighbor_pos)
+		if found_zero_pos != nothing
+			neighbor_pos = neighbor_pos[1:found_zero_pos-1]
+		end
 
 		# Find all promising k-opt swaps
 		best_swap = Vector{Int}(undef, 2+2*num_subtours)
@@ -152,7 +157,7 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 
 			# Generate full tour from swap
 			best_tour = tour[:]
-			pos = swap[1]+1
+			pos = best_swap[1]+1
 			for k in 1:num_subtours
 				if best_swap[2*k] < best_swap[2*k+1]
 					best_tour[pos:pos+best_swap[2*k+1]-best_swap[2*k]] = tour[best_swap[2*k]:best_swap[2*k+1]]
@@ -165,7 +170,6 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 
 			# compute with better accuracy
 			best_gain = current_score - score_tour(cities_xy, cities_nprime, best_tour)
-			
 
 			# Set current tour to best k-opt swap
 			if best_gain > 0
