@@ -313,6 +313,7 @@ function run_mip(start, cities, tenth, subm_path, N; max_time=100, verbose=false
     if verbose && status != :Infeasible
         println("Obj: ", getobjectivevalue(m))
     end
+    verbose && println("Counter: , ", counter)
 
     return subm_path, global_improved, improved_by # subm_path, improved
 end           
