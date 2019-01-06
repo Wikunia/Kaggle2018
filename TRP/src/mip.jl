@@ -334,7 +334,7 @@ function main_mip(path_fn_in, path_fn_out; from=0, to=197769, stride=45, N=202, 
     cities, subm_path = read_cities_and_subm("cities_p.csv", "submissions/"*path_fn_in)
 
     total_improved_by = 0.0
-    for i=from:45:to-N-1
+    for i=from:stride:to-N-1
         tenth = [(s % 10) == 0 for s in i+1:i+N-1]
         subm_path, improved, improved_by = run_mip(i, cities, tenth, subm_path, N; max_time=max_mip_time, verbose=true);
         total_improved_by += improved_by

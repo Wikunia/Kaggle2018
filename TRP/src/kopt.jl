@@ -15,9 +15,8 @@ function kopt(cities, tour, num_opts, num_neighbors, path_fn_out, list_of_i)
 
 		# Filter and store KDTree results for easy access
 		nearest_neighbors = zeros(Int, length(tour)-1, num_neighbors)
-		for i in 1:length(tour)-1
-			neighbors, _ = knn(kdtree, cities_xy[tour[i], 1:2], num_neighbors+100, true)
-			filter!(x->(x > i+3), neighbors)
+		for i in list_of_i
+			neighbors, _ = knn(kdtree, cities_xy[tour[i], 1:2], num_neighbors, true, x-> x <= i+3)
 			min_length = min(length(neighbors), num_neighbors)
 			nearest_neighbors[i,1:min_length] = neighbors[1:min_length]
 		end
