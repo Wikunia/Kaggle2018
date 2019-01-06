@@ -361,7 +361,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  TSP tsp("../input/traveling-santa-2018-prime-paths/cities.csv");
+  TSP tsp("./cities.csv");
   Tour tour("/dev/stdin", &tsp);
 
   int nthreads = omp_get_max_threads();
