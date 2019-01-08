@@ -355,9 +355,9 @@ Run x MIPs from `from` to `to` and length of N using a time limit, a given path 
 This function is run in parallel based on the number of processors available (you can add them by using addprocs(Z))
 """
 function main_mip_parallel(path_fn_in, path_fn_out; from=0, to=197769, N=202, max_mip_time=100)
-    next_start = from-N-1
+    next_start = from-N
     function get_next_start()
-        next_start += N+1
+        next_start += N
         next_start > to-N-1 && return -1, []
         tenth = [(s % 10) == 0 for s in next_start+1:next_start+N-1]
         return next_start, tenth
