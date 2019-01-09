@@ -142,7 +142,7 @@ triplets = triplets[order]
 # In[15]:
 
 
-path = np.array(pd.read_csv('submissions/mip_LKH_1_42_n250_t1000_s125.csv').Path)
+path = np.array(pd.read_csv('submissions/LKH_2_4_2corrected.csv').Path)
 
 
 # 6. Use optimization described above.
